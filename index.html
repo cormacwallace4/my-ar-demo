@@ -21,7 +21,7 @@
 
     /* ---------- glb model ---------- */
     let modelRoot;        // THREE.Group attached to the anchor
-    new GLTFLoader().load('model.glb', gltf => {
+    new GLTFLoader().load('PriestsHouse.glb', gltf => {
       modelRoot = gltf.scene;
       modelRoot.traverse(o => { o.castShadow = o.receiveShadow = true; });
     });
