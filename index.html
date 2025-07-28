@@ -13,8 +13,10 @@
 
   <style>
     html,body{margin:0;height:100%;overflow:hidden;background:#000;}
-    #blocker{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-             flex-direction:column;background:#000;color:#fff;font-family:sans-serif;gap:1rem}
+    #blocker{
+      position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+      flex-direction:column;background:#000;color:#fff;font-family:sans-serif;gap:1rem
+    }
     button{padding:0.8rem 1.2rem;font-size:1rem}
   </style>
 </head>
@@ -33,12 +35,19 @@ renderer.setSize(innerWidth,innerHeight);
 renderer.setPixelRatio(devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
+/* 1️⃣  Give Zappar the WebGL context (needed for camera texture) */
+ZapparThree.glContextSet(renderer.getContext()); // NEW :contentReference[oaicite:3]{index=3}
+
 const scene  = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera();
 
 /* ---------- Zappar camera + pipeline ---------- */
 const Z = window.ZapparThree;                 // UMD global
 const zapparCamera = new Z.Camera();          // handles WebXR or ARKit under the hood
+
+/* 2️⃣  Draw live camera behind everything */
+scene.background = zapparCamera.backgroundTexture; // NEW :contentReference[oaicite:4]{index=4}
+
 scene.add(zapparCamera);
 
 /* ---------- Instant World Tracking (marker‑less) ---------- */
@@ -46,29 +55,28 @@ const tracker      = new Z.InstantWorldTracker();
 const trackerGroup = new Z.InstantWorldAnchorGroup(zapparCamera, tracker);
 scene.add(trackerGroup);
 
-/* ---------- Load your GLB (replace "model.glb") ---------- */
-const gltfLoader = new Z.GLTFLoader();        // patched version of three.js GLTFLoader
+/* ---------- Load your GLB (replace "PriestsHouse.glb") ---------- */
+const gltfLoader = new Z.GLTFLoader();        // patched GLTFLoader
 gltfLoader.load("PriestsHouse.glb", ({scene: glb})=>{
   trackerGroup.add(glb);                      // attach to anchor group
 });
 
 /* ---------- Placement logic: YOU are in charge ---------- */
-// Example: place the anchor exactly 1 m in front of the camera, once, and lock it.
 let hasPlaced = false;
 function placeOneMeterAhead(){
-  tracker.setAnchorPoseFromCameraOffset(0, 0, -1); // X,Y,Z in metres (‑Z is forward) :contentReference[oaicite:1]{index=1}
+  tracker.setAnchorPoseFromCameraOffset(0, 0, -1); // X,Y,Z in metres (‑Z is forward) 
 }
 
 document.getElementById("start-btn").addEventListener("click", async ()=>{
-  // Ask for camera permission – iOS & Android both hit this path.
-  await Z.permissions.requestCameraPermissions();
+  /* 3️⃣  Ask for permission and start the camera */
+  const granted = await Z.permissionRequest();               // NEW :contentReference[oaicite:6]{index=6}
+  if (!granted){ Z.permissionDeniedUI(); return; }           // graceful fail
+
+  zapparCamera.start();                                      // NEW :contentReference[oaicite:7]{index=7}
   document.getElementById("blocker").style.display = "none";
 
-  /* If you’d like the user to tap once on a surface instead
-     of auto‑placing, comment out the next line and call
-     placeOneMeterAhead() inside your own touch handler. */
+  /* Auto‑place once (or hook to your own tap gesture) */
   placeOneMeterAhead();
-
   animate();
 });
 
@@ -81,9 +89,7 @@ function animate(){
 
   // OPTIONAL: keep updating pose until locked
   if(!hasPlaced){
-    /* continuously try to keep the anchor 1 m ahead until we decide we’re happy */
     placeOneMeterAhead();
-    // Example lock‑in if user taps the screen
     window.addEventListener("click", ()=>{ hasPlaced = true; }, {once:true});
   }
 
