@@ -1,106 +1,90 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Cross‑platform Web AR with full placement control</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zappar Web‑AR • Fixed Placement Demo</title>
 
-  <!-- 1.  Three.js (render engine) -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.min.js"></script>
+<!-- Three.js -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.min.js"></script>
 
-  <!-- 2.  Zappar Universal AR for Three.js (works on iOS & Android) -->
-  <script src="https://libs.zappar.com/zappar-threejs/2.4.6/zappar-threejs.min.js"></script>
+<!-- Zappar Universal‑AR Three.js v2.4.6 -->
+<script src="https://libs.zappar.com/zappar-threejs/2.4.6/zappar-threejs.min.js"></script>
 
-  <style>
-    html,body{margin:0;height:100%;overflow:hidden;background:#000;}
-    #blocker{
-      position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-      flex-direction:column;background:#000;color:#fff;font-family:sans-serif;gap:1rem
-    }
-    button{padding:0.8rem 1.2rem;font-size:1rem}
-  </style>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#000;}
+  #blocker{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;background:#000;color:#fff;font-family:sans-serif;gap:1rem}
+  button{padding:0.8rem 1.4rem;font-size:1rem}
+</style>
 </head>
 <body>
 
-<!-- Camera‑permission overlay -->
 <div id="blocker">
   <p>Tap to start the camera</p>
   <button id="start-btn">Enter AR</button>
 </div>
 
 <script>
-/* ---------- Boilerplate: scene, renderer, camera ---------- */
+/* ---------- Renderer & WebGL context ---------- */
 const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true});
-renderer.setSize(innerWidth,innerHeight);
+renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
-/* 1️⃣  Give Zappar the WebGL context (needed for camera texture) */
-ZapparThree.glContextSet(renderer.getContext()); // NEW :contentReference[oaicite:3]{index=3}
+/* Give Zappar access to this GL context */
+ZapparThree.glContextSet(renderer.getContext());                     // :contentReference[oaicite:0]{index=0}
 
-const scene  = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera();
-
-/* ---------- Zappar camera + pipeline ---------- */
-const Z = window.ZapparThree;                 // UMD global
-const zapparCamera = new Z.Camera();          // handles WebXR or ARKit under the hood
-
-/* 2️⃣  Draw live camera behind everything */
-scene.background = zapparCamera.backgroundTexture; // NEW :contentReference[oaicite:4]{index=4}
-
+/* ---------- Scene & Zappar camera ---------- */
+const scene        = new THREE.Scene();
+const zapparCamera = new ZapparThree.Camera();
+scene.background   = zapparCamera.backgroundTexture;                 // :contentReference[oaicite:1]{index=1}
 scene.add(zapparCamera);
 
-/* ---------- Instant World Tracking (marker‑less) ---------- */
-const tracker      = new Z.InstantWorldTracker();
-const trackerGroup = new Z.InstantWorldAnchorGroup(zapparCamera, tracker);
-scene.add(trackerGroup);
+/* ---------- Instant‑World tracker ---------- */
+const tracker      = new ZapparThree.InstantWorldTracker();
+const anchorGroup  = new ZapparThree.InstantWorldAnchorGroup(zapparCamera, tracker);
+scene.add(anchorGroup);
 
-/* ---------- Load your GLB (replace "PriestsHouse.glb") ---------- */
-const gltfLoader = new Z.GLTFLoader();        // patched GLTFLoader
-gltfLoader.load("PriestsHouse.glb", ({scene: glb})=>{
-  trackerGroup.add(glb);                      // attach to anchor group
+/* ---------- Load your GLB ---------- */
+new ZapparThree.GLTFLoader().load("PriestsHouse.glb", gltf => {
+  anchorGroup.add(gltf.scene);
 });
 
-/* ---------- Placement logic: YOU are in charge ---------- */
-let hasPlaced = false;
+/* ---------- Placement control ---------- */
 function placeOneMeterAhead(){
-  tracker.setAnchorPoseFromCameraOffset(0, 0, -1); // X,Y,Z in metres (‑Z is forward) 
+  tracker.setAnchorPoseFromCameraOffset(0, 0, -1);                   // 
 }
+let locked = false;
 
-document.getElementById("start-btn").addEventListener("click", async ()=>{
-  /* 3️⃣  Ask for permission and start the camera */
-  const granted = await Z.permissionRequest();               // NEW :contentReference[oaicite:6]{index=6}
-  if (!granted){ Z.permissionDeniedUI(); return; }           // graceful fail
-
-  zapparCamera.start();                                      // NEW :contentReference[oaicite:7]{index=7}
-  document.getElementById("blocker").style.display = "none";
-
-  /* Auto‑place once (or hook to your own tap gesture) */
-  placeOneMeterAhead();
-  animate();
+/* ---------- Permission + start flow ---------- */
+document.getElementById("start-btn").addEventListener("click", () => {
+  ZapparThree.permissionRequest()                                    // :contentReference[oaicite:3]{index=3}
+    .then(granted => {
+      if (!granted){ ZapparThree.permissionDeniedUI(); return; }
+      zapparCamera.start();                                          // :contentReference[oaicite:4]{index=4}
+      document.getElementById("blocker").style.display = "none";
+      placeOneMeterAhead();
+      animate();
+    });
 });
 
-/* ---------- Main frame loop ---------- */
+/* ---------- Main loop ---------- */
 function animate(){
   requestAnimationFrame(animate);
-
-  // Update Zappar camera feed & pipeline
   zapparCamera.updateFrame(renderer);
-
-  // OPTIONAL: keep updating pose until locked
-  if(!hasPlaced){
-    placeOneMeterAhead();
-    window.addEventListener("click", ()=>{ hasPlaced = true; }, {once:true});
-  }
-
+  if (!locked) placeOneMeterAhead();
   renderer.render(scene, zapparCamera);
 }
 
-/* ---------- Handle window resize ---------- */
-window.addEventListener("resize", ()=>{
-  renderer.setSize(innerWidth,innerHeight);
+/* Lock the placement on first user tap after AR starts */
+window.addEventListener("click", () => { locked = true; }, {once:true});
+
+/* ---------- Resize ---------- */
+addEventListener("resize", () => {
+  renderer.setSize(innerWidth, innerHeight);
 });
 </script>
-
 </body>
 </html>
