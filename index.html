@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Zappar Web‑AR • Fixed Placement Demo</title>
+<title>Zappar Web‑AR • Fixed‑Placement Demo</title>
 
 <!-- Three.js -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.min.js"></script>
@@ -27,24 +27,24 @@
 </div>
 
 <script>
-/* ---------- Renderer & WebGL context ---------- */
+/* ---------- Renderer & GL context ---------- */
 const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true});
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
-/* Give Zappar access to this GL context */
-ZapparThree.glContextSet(renderer.getContext());                     // :contentReference[oaicite:0]{index=0}
+/* Give Zappar access to this WebGL context */
+ZapparThree.glContextSet(renderer.getContext());                    // ★ required
 
 /* ---------- Scene & Zappar camera ---------- */
 const scene        = new THREE.Scene();
 const zapparCamera = new ZapparThree.Camera();
-scene.background   = zapparCamera.backgroundTexture;                 // :contentReference[oaicite:1]{index=1}
+scene.background   = zapparCamera.backgroundTexture;               // draw camera feed
 scene.add(zapparCamera);
 
-/* ---------- Instant‑World tracker ---------- */
-const tracker      = new ZapparThree.InstantWorldTracker();
-const anchorGroup  = new ZapparThree.InstantWorldAnchorGroup(zapparCamera, tracker);
+/* ---------- Instant‑world tracking ---------- */
+const tracker     = new ZapparThree.InstantWorldTracker();
+const anchorGroup = new ZapparThree.InstantWorldAnchorGroup(zapparCamera, tracker);
 scene.add(anchorGroup);
 
 /* ---------- Load your GLB ---------- */
@@ -52,18 +52,18 @@ new ZapparThree.GLTFLoader().load("PriestsHouse.glb", gltf => {
   anchorGroup.add(gltf.scene);
 });
 
-/* ---------- Placement control ---------- */
+/* ---------- Placement logic ---------- */
 function placeOneMeterAhead(){
-  tracker.setAnchorPoseFromCameraOffset(0, 0, -1);                   // 
+  tracker.setAnchorPoseFromCameraOffset(0, 0, -1);                 // -Z = forward
 }
 let locked = false;
 
 /* ---------- Permission + start flow ---------- */
 document.getElementById("start-btn").addEventListener("click", () => {
-  ZapparThree.permissionRequest()                                    // :contentReference[oaicite:3]{index=3}
+  ZapparThree.permissionRequestUI()                                // ★ correct helper
     .then(granted => {
-      if (!granted){ ZapparThree.permissionDeniedUI(); return; }
-      zapparCamera.start();                                          // :contentReference[oaicite:4]{index=4}
+      if (!granted){ ZapparThree.permissionDeniedUI(); return; }   // graceful fail
+      zapparCamera.start();                                        // triggers cam prompt
       document.getElementById("blocker").style.display = "none";
       placeOneMeterAhead();
       animate();
@@ -78,7 +78,7 @@ function animate(){
   renderer.render(scene, zapparCamera);
 }
 
-/* Lock the placement on first user tap after AR starts */
+/* Lock placement on first user tap after AR starts */
 window.addEventListener("click", () => { locked = true; }, {once:true});
 
 /* ---------- Resize ---------- */
@@ -88,3 +88,4 @@ addEventListener("resize", () => {
 </script>
 </body>
 </html>
+
