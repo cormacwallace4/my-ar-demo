@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf‑8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>WebXR AR – fixed 1 m placement with occlusion</title>
+
+  <!-- Three.js + helpers (ESM) -->
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.161.0/build/three.module.js';
+    import {GLTFLoader} from 'https://unpkg.com/three@0.161.0/examples/jsm/loaders/GLTFLoader.js';
+
+    /* ---------- basic renderer / scene ---------- */
+    const scene    = new THREE.Scene();
+    const camera   = new THREE.PerspectiveCamera();
+    const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true});
+    renderer.xr.enabled = true;
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    /* ---------- glb model ---------- */
+    let modelRoot;        // THREE.Group attached to the anchor
+    new GLTFLoader().load('model.glb', gltf => {
+      modelRoot = gltf.scene;
+      modelRoot.traverse(o => { o.castShadow = o.receiveShadow = true; });
+    });
+
+    /* ---------- XR session with anchors + depth ---------- */
+    const btn = document.createElement('button');
+    btn.textContent = 'Enter AR';
+    Object.assign(btn.style,{
+      position:'absolute',top:'20px',left:'50%',transform:'translateX(-50%)',
+      padding:'12px 24px',fontSize:'16px',zIndex:'999'
+    });
+    document.body.appendChild(btn);
+
+    let referenceSpace, anchor, anchorSpace, depthTexture, glBinding;
+    const ONE_METER = 1.0;
+
+    btn.addEventListener('click', async () => {
+      const session = await navigator.xr.requestSession('immersive-ar',{
+        requiredFeatures : ['local-floor'],
+        optionalFeatures : ['anchors','depth-sensing'],
+        depthSensing : {
+          usagePreference : ['gpu-optimized','cpu-optimized'],
+          dataFormatPreference : ['luminance-alpha','float32']
+        }
+      });
+      renderer.xr.setSession(session);
+
+      referenceSpace = await session.requestReferenceSpace('local-floor');
+      glBinding      = new XRWebGLBinding(session, renderer.getContext());
+
+      session.requestAnimationFrame(onXRFrame);
+      btn.remove();  // hide UI once we’re in AR
+    });
+
+    /* ---------- create anchor 1 m ahead and render loop ---------- */
+    async function onXRFrame(t, frame){
+      const session = frame.session;
+      session.requestAnimationFrame(onXRFrame);
+
+      const pose = frame.getViewerPose(referenceSpace);
+      if (!pose) return;
+
+      /* 1st frame → place anchor exactly 1 m in front of the camera */
+      if (!anchor){
+        const view     = pose.views[0];
+        const orien    = view.transform.orientation;
+        const pos      = view.transform.position;
+        const forward  = new THREE.Vector3(0,0,-1)
+                            .applyQuaternion(new THREE.Quaternion(orien.x,orien.y,orien.z,orien.w))
+                            .normalize();
+        const target   = {
+          x : pos.x + forward.x * ONE_METER,
+          y : pos.y + forward.y * ONE_METER,
+          z : pos.z + forward.z * ONE_METER
+        };
+        const rigidTransform = new XRRigidTransform(target);
+
+        anchor = await frame.createAnchor(rigidTransform, referenceSpace); /* fixed‑world pose */ :contentReference[oaicite:0]{index=0}
+        anchorSpace = anchor.anchorSpace;
+
+        /* attach THREE.Group at anchorSpace */
+        const anchorGroup = new THREE.Group();
+        anchorGroup.add(modelRoot);       // add GLB once it’s loaded
+        scene.add(anchorGroup);
+        anchorGroup.userData.anchorSpace = anchorSpace;
+      }
+
+      /* ---------- per‑frame: sync anchor pose & pull depth texture ---------- */
+      for (const obj of scene.children){
+        if (!obj.userData.anchorSpace) continue;
+        const pose = frame.getPose(obj.userData.anchorSpace, referenceSpace);
+        if (pose){
+          const m = obj.matrix;
+          const {orientation, position} = pose.transform;
+          m.makeRotationFromQuaternion(new THREE.Quaternion(
+            orientation.x,orientation.y,orientation.z,orientation.w));
+          m.setPosition(position.x,position.y,position.z);
+          obj.matrixAutoUpdate = false;
+        }
+      }
+
+      /* get hardware depth for occlusion (if available) */
+      const view = pose.views[0];
+      const depthInfo = frame.getDepthInformation?.(view); /* WebXR Depth */ :contentReference[oaicite:1]{index=1}
+      if (depthInfo){
+        depthTexture = glBinding.getDepthInformation(view);
+        renderer.autoClear = false;      // let depth buffer persist
+        renderer.clearDepth();
+        renderer.state.buffers.depth.setTest(true);
+        renderer.setDepthTexture(depthTexture.texture, depthTexture);
+      }
+
+      renderer.render(scene,camera);
+    }
+
+    /* ---------- keep canvas sized ---------- */
+    window.addEventListener('resize', () => {
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+  </script>
+  <style>
+    html,body {margin:0;height:100%;overflow:hidden;background:#000;}
+    canvas {width:100%;height:100%;}
+  </style>
+</head>
+<body>
+  <!-- Nothing else needed – everything is created in JS -->
+</body>
+</html>
