@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Zappar Web‑AR • Fixed‑Placement Demo (with logs)</title>
+<title>Zappar Web‑AR • Fixed Placement (debug)</title>
 
-<!-- Three.js -->
-<script src="https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.min.js"></script>
+<!-- Three.js 0.160.0 via jsDelivr -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 
-<!-- Zappar Universal‑AR Three.js v2.4.6 -->
+<!-- Zappar‑ThreeJS 2.4.6 -->
 <script src="https://libs.zappar.com/zappar-threejs/2.4.6/zappar-threejs.min.js"></script>
 
 <style>
@@ -27,109 +27,66 @@
 </div>
 
 <script>
-/* =============== Utility: global error logger =============== */
-window.addEventListener("error", e=>{
-  console.error("[GLOBAL‑ERROR]", e.message, e.filename+":"+e.lineno);
-});
-window.addEventListener("unhandledrejection", e=>{
-  console.error("[PROMISE‑REJECTION]", e.reason);
-});
+/* global error traps */
+addEventListener("error",  e => console.error("[ERROR]", e.message));
+addEventListener("unhandledrejection", e => console.error("[PROMISE]", e.reason));
 
-/* =============== Renderer & GL context =============== */
-console.log("[BOOT] Creating WebGLRenderer…");
-const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true});
+console.log("▶️ three.js version", THREE.REVISION);
+console.log("▶️ ZapparThree version", ZapparThree.VERSION);
+
+/* Renderer + GL context */
+const renderer = new THREE.WebGLRenderer({alpha:true, antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(devicePixelRatio);
 document.body.appendChild(renderer.domElement);
+ZapparThree.glContextSet(renderer.getContext());
 
-/* Give Zappar access to this WebGL context */
-try{
-  ZapparThree.glContextSet(renderer.getContext());
-  console.log("✅ ZapparThree.glContextSet OK");
-}catch(err){
-  console.error("❌ glContextSet failed", err);
-}
-
-/* =============== Scene & Zappar camera =============== */
+/* Scene & camera */
 const scene        = new THREE.Scene();
 const zapparCamera = new ZapparThree.Camera();
 scene.background   = zapparCamera.backgroundTexture;
 scene.add(zapparCamera);
 
-/* =============== Instant‑world tracking =============== */
+/* Instant tracker */
 const tracker     = new ZapparThree.InstantWorldTracker();
 const anchorGroup = new ZapparThree.InstantWorldAnchorGroup(zapparCamera, tracker);
 scene.add(anchorGroup);
 
-/* =============== Load GLB =============== */
-console.log("[BOOT] Loading PriestsHouse.glb…");
-new ZapparThree.GLTFLoader().load(
-  "PriestsHouse.glb",
-  gltf=>{
-    console.log("✅ GLB loaded");
-    anchorGroup.add(gltf.scene);
-  },
-  xhr=>{
-    console.log(`[GLB] ${Math.round((xhr.loaded/xhr.total)*100)} %`);
-  },
-  err=>{
-    console.error("❌ GLB load error", err);
-  }
+/* Load model */
+new ZapparThree.GLTFLoader().load("PriestsHouse.glb",
+  gltf => { anchorGroup.add(gltf.scene); console.log("✅ GLB loaded"); },
+  xhr  => console.log(`GLB ${Math.round(xhr.loaded/xhr.total*100)} %`),
+  err  => console.error("❌ GLB error", err)
 );
 
-/* =============== Placement logic =============== */
-function placeOneMeterAhead(){
-  tracker.setAnchorPoseFromCameraOffset(0, 0, -1);
-  console.log("[POSE] Anchor at 1 m forward");
-}
+/* placement */
+function placeOneM(){ tracker.setAnchorPoseFromCameraOffset(0,0,-1); }
 let locked = false;
 
-/* =============== Permission + start flow =============== */
-const btn = document.getElementById("start-btn");
-btn.addEventListener("click", () => {
-  console.log("[UI] Enter AR clicked");
-  ZapparThree.permissionRequestUI().then(granted=>{
-    if (!granted){
-      console.warn("❌ User denied permissions");
-      ZapparThree.permissionDeniedUI();
-      return;
-    }
-    console.log("✅ Permissions granted");
-    console.log("[CAMERA] Starting Zappar camera…");
+/* click handler */
+startBtn.addEventListener("click", () => {
+  console.log("[UI] Enter AR clicked");
+  ZapparThree.permissionRequestUI().then(granted => {
+    if(!granted){ console.warn("❌ permission denied"); return; }
+    console.log("✅ permission granted");
     zapparCamera.start().then(()=>{
-      console.log("✅ Camera started");
-      document.getElementById("blocker").style.display = "none";
-      placeOneMeterAhead();
+      console.log("✅ camera started");
+      blocker.style.display="none";
+      placeOneM();
       animate();
-    }).catch(err=>{
-      console.error("❌ Camera start failed", err);
     });
-  }).catch(err=>{
-    console.error("❌ permissionRequestUI rejected", err);
   });
 });
 
-/* =============== Main loop =============== */
 function animate(){
   requestAnimationFrame(animate);
   zapparCamera.updateFrame(renderer);
-  if (!locked) placeOneMeterAhead();
+  if(!locked) placeOneM();
   renderer.render(scene, zapparCamera);
 }
 
-/* Lock placement on first user tap after AR starts */
-window.addEventListener("click", () => {
-  if (!locked){
-    locked = true;
-    console.log("[POSE] Placement locked by user tap");
-  }
-},{once:true});
-
-/* =============== Resize =============== */
-addEventListener("resize", () => {
-  renderer.setSize(innerWidth, innerHeight);
-  console.log("[UI] Window resized");
-});
+addEventListener("click", ()=> locked=true, {once:true});
+addEventListener("resize", ()=> renderer.setSize(innerWidth, innerHeight));
 </script>
 </body>
 </html>
